@@ -250,9 +250,6 @@ LaravelMixS3Uploader.prototype.apply = function (compiler) {
             this.filesToUpload = this.filesToUpload.concat(this.getIncludes(this.includes))
         }
 
-        console.log(this.filesToUpload);
-        return;
-
         callback();
     });
 
