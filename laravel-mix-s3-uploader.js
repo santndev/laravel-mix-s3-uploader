@@ -13,7 +13,7 @@ let bar;
  */
 function LaravelMixS3Uploader(options) {
     this.bucket = options.bucket;
-    this.assets = [];
+    this.filesToUpload = [];
 
     if (!options.region) {
         options.region = 'us-east-1';
@@ -31,8 +31,8 @@ function LaravelMixS3Uploader(options) {
         this.includes = options.includes;
     }
 
-    if (options.exclude) {
-        this.exclude = new RegExp(options.exclude);
+    if (options.excludes) {
+        this.excludes = options.excludes;
     }
 
     if (options.sessionToken) {
@@ -146,7 +146,7 @@ LaravelMixS3Uploader.prototype.upload = function (filename, content) {
         try {
             const command = new PutObjectCommand(params);
             const result = await s3.send(command);
-            // Kiểm tra kết quả để xác định xem tải lên đã thành công hay không.
+            // Check the results to determine if the upload was successful.
             if (result && result.$metadata.httpStatusCode === 200) {
                 resolve();
             } else {
@@ -160,12 +160,30 @@ LaravelMixS3Uploader.prototype.upload = function (filename, content) {
 };
 
 /**
+ * Check if a file is excluded based on the provided list of excludes.
+ * @param {string} filename - Name of the file to check.
+ * @returns {boolean} - True if the file is excluded, otherwise false.
+ */
+LaravelMixS3Uploader.prototype.isExcluded = function (filename) {
+    if (this.excludes && this.excludes.length > 0) {
+        for (let exclude of this.excludes) {
+            exclude = exclude.replace(/\\/g, '/');
+            filename = filename.replace(/\\/g, '/');
+            if (filename.startsWith(exclude)) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+/**
  * Check if a file should be uploaded based on includes and excludes.
  * @param {string} filename - Name of the file to check.
  * @returns {boolean} - True if the file should be uploaded, otherwise false.
  */
 LaravelMixS3Uploader.prototype.shouldUpload = function (filename) {
-    return !this.exclude || !this.exclude.test(filename);
+    return !this.isExcluded(filename);
 }
 
 /**
@@ -175,22 +193,26 @@ LaravelMixS3Uploader.prototype.shouldUpload = function (filename) {
  */
 LaravelMixS3Uploader.prototype.getIncludes = function (dirs) {
     const files = [];
-    const sourceToRemove = this.source;
+    const self = this;
 
     function traverse(currentPath) {
         const items = fs.readdirSync(currentPath);
 
         items.forEach(function (item) {
-            let itemPath = path.join(currentPath, item);
+            let itemPath = self.removeSlashes(path.join(currentPath, item));
             const isDirectory = fs.statSync(itemPath).isDirectory();
-
-            if (isDirectory) {
-                traverse(itemPath);
-            } else {
-                if (itemPath.startsWith(sourceToRemove)) {
-                    itemPath = itemPath.slice(sourceToRemove.length);
+            if(self.shouldUpload(itemPath)){
+                if (isDirectory) {
+                    traverse(itemPath);
+                } else {
+                    if (itemPath.startsWith(self.source)) {
+                        itemPath = itemPath.slice(self.source.length + 1); //remove included "/"
+                    }
+                    if (self.shouldUpload(itemPath)) {
+                        itemPath = itemPath.replace(/\\/g, '/');
+                        files.push(itemPath);
+                    }
                 }
-                files.push(itemPath.replace(/\\/g, '/'));
             }
         });
     }
@@ -218,21 +240,24 @@ LaravelMixS3Uploader.prototype.log = function (message) {
  */
 LaravelMixS3Uploader.prototype.apply = function (compiler) {
     compiler.hooks.emit.tapAsync("LaravelMixS3Uploader", async (compilation, callback) => {
-        for (const filename in compilation.assets) {
+        for (const filename in compilation.filesToUpload) {
             if (this.shouldUpload(filename)) {
-                this.assets.push(filename);
+                this.filesToUpload.push(filename);
             }
         }
 
         if (this.includes) {
-            this.assets = this.assets.concat(this.getIncludes(this.includes))
+            this.filesToUpload = this.filesToUpload.concat(this.getIncludes(this.includes))
         }
+
+        console.log(this.filesToUpload);
+        return;
 
         callback();
     });
 
     compiler.hooks.afterEmit.tapAsync("LaravelMixS3Uploader", async (compilation, cb) => {
-        this.log('\r\n\r\nUploading ' + this.assets.length + ' assets to \'' + this.bucket + '\'...')
+        this.log('\r\n\r\nUploading ' + this.filesToUpload.length + ' assets to \'' + this.bucket + '\'...')
 
         bar = new SingleBar({
             format: 'Progress | {bar} | {percentage}% | {filename}',
@@ -241,14 +266,14 @@ LaravelMixS3Uploader.prototype.apply = function (compiler) {
             hideCursor: true
         });
 
-        bar.start(this.assets.length, 0, {
+        bar.start(this.filesToUpload.length, 0, {
             filename: "Starting..."
         });
 
         let c = 1;
         let error = false;
 
-        for (const asset of this.assets) {
+        for (const asset of this.filesToUpload) {
             // Remove the question mark.
             // (added by laravel-mix for some assets)
             let filename = asset.split('?')[0];
