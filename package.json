@@ -1,0 +1,31 @@
+{
+  "name": "laravel-mix-s3-uploader",
+  "version": "1.0.0",
+  "description": "A simple Webpack plugin is compatible with Laravel Mix that uploads your packed assets to your AWS S3.",
+  "main": "laravel-mix-s3-uploader.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/santndev/laravel-mix-s3-uploader.git"
+  },
+  "keywords": [
+    "laravel",
+    "mix",
+    "s3",
+    "upload"
+  ],
+  "author": "SanTran",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/santndev/laravel-mix-s3-uploader/issues"
+  },
+  "homepage": "https://github.com/santndev/laravel-mix-s3-uploader#readme",
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.414.0",
+    "aws-sdk": "^2.1459.0",
+    "cli-progress": "^3.12.0",
+    "mime-types": "^2.1.35"
+  }
+}
