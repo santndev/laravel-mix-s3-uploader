@@ -1,4 +1,4 @@
-import { S3 } from "@aws-sdk/client-s3";
+const { S3, PutObjectCommand } = require("@aws-sdk/client-s3");
 const fs = require('fs');
 const { SingleBar } = require('cli-progress');
 const mime = require('mime-types');
@@ -123,35 +123,40 @@ LaravelMixS3Uploader.prototype.removeSlashes = function (str) {
  * @returns {Promise} - Promise resolved after the upload is complete.
  */
 LaravelMixS3Uploader.prototype.upload = function (filename, content) {
-    return new Promise((resolve, reject) => {
+    return new Promise(async (resolve, reject) => {
         const params = {
             Bucket: this.bucket,
             Key: filename,
             Body: content
-        }
+        };
 
         if (this.acl) {
-            params.ACL = this.acl
+            params.ACL = this.acl;
         }
 
         if (this.cache) {
-            params.CacheControl = this.cache
+            params.CacheControl = this.cache;
         }
 
-        const contentType = mime.lookup(filename)
+        const contentType = mime.lookup(filename);
         if (contentType) {
             params.ContentType = contentType;
         }
 
-        s3.upload(params, (err, data) => {
-            if (err) {
-                console.error('Error uploading ' + filename + ' to ' + this.bucket + ': ' + err.name + ' - ' + err.message);
-                reject(err);
-            } else {
+        try {
+            const command = new PutObjectCommand(params);
+            const result = await s3.send(command);
+            // Kiểm tra kết quả để xác định xem tải lên đã thành công hay không.
+            if (result && result.$metadata.httpStatusCode === 200) {
                 resolve();
+            } else {
+                reject('Error uploading ' + filename + ' to ' + this.bucket + ': Unknown error');
             }
-        });
-    })
+        } catch (err) {
+            console.error('Error uploading ' + filename + ' to ' + this.bucket + ': ' + err.name + ' - ' + err.message);
+            reject(err);
+        }
+    });
 };
 
 /**
